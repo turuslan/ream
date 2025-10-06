@@ -35,6 +35,12 @@ impl From<ssz::DecodeError> for ReqRespError {
     }
 }
 
+impl From<snap::Error> for ReqRespError {
+    fn from(err: snap::Error) -> Self {
+        ReqRespError::InvalidData(format!("Failed to decode snappy: {err:?}"))
+    }
+}
+
 impl From<VariableList<u8, U256>> for ReqRespError {
     fn from(err: VariableList<u8, U256>) -> Self {
         let err = String::from_utf8(Vec::from(err)).unwrap_or("Invalid UTF-8".to_string());

@@ -1,6 +1,5 @@
 use std::{
     future::Future,
-    io::{Cursor, Read, Write},
     pin::Pin,
     time::Duration,
 };
@@ -17,7 +16,6 @@ use libp2p::{
 };
 use ream_consensus_misc::constants::beacon::genesis_validators_root;
 use ream_network_spec::networks::beacon_network_spec;
-use snap::{read::FrameDecoder, write::FrameEncoder};
 use ssz::{Decode, Encode};
 use ssz_types::{VariableList, typenum::U256};
 use tokio::time::timeout;
@@ -154,12 +152,10 @@ impl Encoder<RespMessage> for InboundSSZSnappyCodec {
             dst.extend(beacon_network_spec().fork_digest(genesis_validators_root()));
         }
 
-        Uvi::<usize>::default().encode(bytes.len(), dst)?;
-
-        let mut encoder = FrameEncoder::new(vec![]);
-        encoder.write_all(&bytes).map_err(ReqRespError::from)?;
-        encoder.flush().map_err(ReqRespError::from)?;
-        dst.extend_from_slice(encoder.get_ref());
+        let mut encoder = snap::raw::Encoder::new();
+        let compressed = encoder.compress_vec(&bytes)?;
+        Uvi::<usize>::default().encode(compressed.len(), dst)?;
+        dst.extend_from_slice(&compressed);
 
         Ok(())
     }
@@ -183,11 +179,15 @@ impl Decoder for InboundSSZSnappyCodec {
             None => return Ok(None),
         };
 
-        let mut decoder = FrameDecoder::new(Cursor::new(&src));
-        let mut buf: Vec<u8> = vec![0; length];
-        let result = match decoder.read_exact(&mut buf) {
-            Ok(_) => {
-                src.advance(decoder.get_ref().position() as usize);
+        if src.len() < length {
+            return Err(ReqRespError::IncompleteStream);
+        }
+        let compressed = &src[0..length];
+
+        let mut decoder = snap::raw::Decoder::new();
+        let result = match decoder.decompress_vec(&compressed[..]) {
+            Ok(buf) => {
+                src.advance(length);
                 match self.protocol.protocol {
                     SupportedProtocol::Beacon(beacon_supported_protocol) => {
                         let request_message = match beacon_supported_protocol {
