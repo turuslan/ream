@@ -167,3 +167,4 @@ url = "2.5"
 
 [patch.crates-io]
 ethereum_hashing = { git = "https://github.com/ReamLabs/ethereum_hashing.git" }
+quinn-udp = { path = "patch/quinn-udp" }
